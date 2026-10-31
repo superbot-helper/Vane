@@ -23,7 +23,53 @@ export const POST = async (
       );
     }
 
+    if (body.type !== 'embedding' && body.type !== 'chat') {
+      return Response.json(
+        {
+          message: "Type must be 'embedding' or 'chat'",
+        },
+        {
+          status: 400,
+        },
+      );
+    }
+
     const registry = new ModelRegistry();
+    const provider = (await registry.getActiveProviders()).find(
+      (entry) => entry.id === id,
+    );
+
+    if (!provider) {
+      return Response.json(
+        {
+          message: 'Provider not found',
+        },
+        {
+          status: 404,
+        },
+      );
+    }
+
+    // Only a model the provider already lists may be added. An arbitrary key
+    // makes the next upload or search download that Hugging Face repository,
+    // parse its ONNX weights and persist its vector space; the registry's own
+    // loaders already reject a key outside this list, so accepting one here
+    // only stores a model that can never load.
+    const knownModels =
+      body.type === 'chat' ? provider.chatModels : provider.embeddingModels;
+
+    if (!knownModels.some((model) => model.key === body.key)) {
+      return Response.json(
+        {
+          message: `Unknown model key: ${body.key}. This provider lists: ${knownModels
+            .map((model) => model.key)
+            .join(', ')}`,
+        },
+        {
+          status: 400,
+        },
+      );
+    }
 
     await registry.addProviderModel(id, body.type, body);
 
